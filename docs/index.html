@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiddleClick — 3-finger middle click for macOS</title>
+  <meta name="description" content="A lightweight macOS menu bar app that enables middle click via a 3-finger tap on the trackpad." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #08080f;
+      --surface:   #0f0f1a;
+      --surface2:  #16162a;
+      --border:    rgba(124, 109, 250, 0.15);
+      --accent:    #7c6dfa;
+      --accent2:   #4f9eff;
+      --glow:      rgba(124, 109, 250, 0.35);
+      --text:      #e2e2f0;
+      --muted:     #7878a0;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'Inter', sans-serif;
+      --display:   'Syne', sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0; opacity: 0.4;
+    }
+
+    /* ── GRID BACKGROUND ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(124,109,250,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,109,250,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      backdrop-filter: blur(20px) saturate(1.4);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(8,8,15,0.8);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .inner {
+      max-width: 900px; margin: 0 auto; padding: 0 24px;
+      height: 56px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo .hand { font-size: 20px; }
+    .nav-logo span { font-family: var(--display); font-weight: 700; font-size: 17px; color: var(--text); }
+    .nav-links { display: flex; gap: 8px; }
+    .nav-links a {
+      font-family: var(--mono); font-size: 12px; color: var(--muted);
+      text-decoration: none; padding: 6px 12px; border-radius: 6px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--surface2); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center;
+      padding: 120px 0 80px; position: relative;
+    }
+    .hero-glow {
+      position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+      width: 600px; height: 400px;
+      background: radial-gradient(ellipse at center, rgba(124,109,250,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--mono); font-size: 11px; font-weight: 500;
+      color: var(--accent); background: rgba(124,109,250,0.1);
+      border: 1px solid rgba(124,109,250,0.25);
+      padding: 5px 12px; border-radius: 20px; margin-bottom: 28px;
+      animation: fadeUp 0.6s ease both;
+    }
+    .badge::before { content: '●'; font-size: 8px; animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    h1 {
+      font-family: var(--display); font-size: clamp(52px, 8vw, 88px);
+      font-weight: 800; line-height: 1.0; letter-spacing: -2px;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+    h1 .line1 { display: block; color: var(--text); }
+    h1 .line2 {
+      display: block;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tagline {
+      margin-top: 24px; font-size: 18px; color: var(--muted);
+      max-width: 480px; line-height: 1.7;
+      animation: fadeUp 0.6s 0.2s ease both;
+    }
+    .hero-actions {
+      margin-top: 40px; display: flex; gap: 12px; flex-wrap: wrap;
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 24px; border-radius: 10px; font-size: 15px;
+      font-weight: 500; text-decoration: none; transition: all 0.2s; cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+      box-shadow: 0 0 24px var(--glow);
+    }
+    .btn-primary:hover { background: #8f81ff; transform: translateY(-1px); box-shadow: 0 0 36px var(--glow); }
+    .btn-ghost {
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--surface); border-color: rgba(124,109,250,0.35); transform: translateY(-1px); }
+
+    .hero-meta {
+      margin-top: 28px; display: flex; align-items: center; gap: 20px;
+      font-family: var(--mono); font-size: 12px; color: var(--muted);
+      animation: fadeUp 0.6s 0.4s ease both;
+    }
+    .hero-meta span { display: flex; align-items: center; gap: 6px; }
+
+    /* ── DEMO CARD ── */
+    .demo-card {
+      margin-top: 64px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      display: flex; flex-direction: column; align-items: center; gap: 20px;
+      animation: fadeUp 0.6s 0.5s ease both;
+      position: relative; overflow: hidden;
+    }
+    .demo-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+    .fingers-demo {
+      display: flex; gap: 10px; align-items: flex-end;
+    }
+    .finger {
+      width: 22px; border-radius: 12px 12px 6px 6px;
+      background: linear-gradient(180deg, var(--accent) 0%, rgba(124,109,250,0.3) 100%);
+      animation: tapFinger 2.4s ease-in-out infinite;
+    }
+    .finger:nth-child(1) { height: 52px; animation-delay: 0s; }
+    .finger:nth-child(2) { height: 64px; animation-delay: 0.05s; }
+    .finger:nth-child(3) { height: 52px; animation-delay: 0.1s; }
+    @keyframes tapFinger {
+      0%,40%,100% { transform: translateY(0); opacity: 1; }
+      20% { transform: translateY(12px); opacity: 0.7; }
+    }
+    .arrow-demo { font-size: 22px; color: var(--muted); }
+    .click-demo {
+      display: flex; align-items: center; justify-content: center;
+      width: 52px; height: 52px; border-radius: 50%;
+      border: 2px solid var(--accent2);
+      font-size: 22px;
+      animation: clickPop 2.4s ease-in-out infinite;
+    }
+    @keyframes clickPop {
+      0%,35%,100% { transform: scale(1); box-shadow: none; }
+      50% { transform: scale(1.15); box-shadow: 0 0 20px rgba(79,158,255,0.5); }
+    }
+    .demo-label {
+      font-family: var(--mono); font-size: 12px; color: var(--muted);
+      text-align: center;
+    }
+
+    /* ── SECTIONS ── */
+    section { padding: 96px 0; position: relative; z-index: 1; }
+    .section-label {
+      font-family: var(--mono); font-size: 11px; font-weight: 500;
+      color: var(--accent); text-transform: uppercase; letter-spacing: 2px;
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-family: var(--display); font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700; letter-spacing: -1px; margin-bottom: 16px;
+    }
+    .section-sub { color: var(--muted); font-size: 16px; max-width: 480px; }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px; margin-top: 48px;
+    }
+    .feature-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px;
+      transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .feature-card::after {
+      content: ''; position: absolute; inset: 0; border-radius: 14px;
+      background: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(124,109,250,0.06), transparent 60%);
+      pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    }
+    .feature-card:hover { border-color: rgba(124,109,250,0.4); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .feature-card:hover::after { opacity: 1; }
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: rgba(124,109,250,0.12); border: 1px solid rgba(124,109,250,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 16px;
+    }
+    .feature-card h3 { font-family: var(--display); font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: var(--muted); line-height: 1.65; }
+
+    /* ── HOW IT WORKS ── */
+    .steps { margin-top: 48px; display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: grid; grid-template-columns: 56px 1fr;
+      gap: 24px; padding: 28px 0; position: relative;
+    }
+    .step:not(:last-child)::after {
+      content: ''; position: absolute;
+      left: 27px; top: 64px; bottom: -28px;
+      width: 2px; background: var(--border);
+    }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--surface2); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); font-size: 16px; font-weight: 500; color: var(--accent);
+      flex-shrink: 0; position: relative; z-index: 1;
+    }
+    .step-content h3 { font-family: var(--display); font-size: 18px; font-weight: 600; margin-bottom: 8px; padding-top: 14px; }
+    .step-content p { font-size: 14px; color: var(--muted); line-height: 1.65; }
+    .code-pill {
+      display: inline-block; font-family: var(--mono); font-size: 12px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--accent2); padding: 2px 10px; border-radius: 6px; margin-top: 8px;
+    }
+
+    /* ── REQUIREMENTS ── */
+    .req-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px; margin-top: 40px;
+    }
+    .req-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px 22px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .req-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+    .req-item span { font-size: 14px; color: var(--muted); }
+    .req-item strong { display: block; font-size: 15px; color: var(--text); font-weight: 500; }
+
+    /* ── CTA BANNER ── */
+    .cta-banner {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 56px 48px;
+      text-align: center; position: relative; overflow: hidden;
+      margin: 0 0 96px;
+    }
+    .cta-banner::before {
+      content: '';
+      position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+      width: 400px; height: 300px;
+      background: radial-gradient(ellipse, rgba(124,109,250,0.15), transparent 70%);
+      pointer-events: none;
+    }
+    .cta-banner h2 { font-size: clamp(24px,4vw,36px); margin-bottom: 12px; }
+    .cta-banner p { color: var(--muted); margin-bottom: 32px; }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0; position: relative; z-index: 1;
+    }
+    footer .inner {
+      max-width: 900px; margin: 0 auto; padding: 0 24px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: gap-16px;
+      gap: 16px;
+    }
+    .footer-brand { display: flex; align-items: center; gap: 10px; }
+    .footer-brand span { font-family: var(--display); font-size: 15px; font-weight: 700; }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a {
+      font-family: var(--mono); font-size: 12px; color: var(--muted);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 600px) {
+      .hero-actions { flex-direction: column; }
+      .btn { justify-content: center; }
+      .cta-banner { padding: 40px 24px; }
+      footer .inner { flex-direction: column; text-align: center; }
+    }
+
+    /* SVG icons */
+    .icon-download::before { content: '↓'; margin-right: 2px; }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="inner">
+      <a class="nav-logo" href="#">
+        <span class="hand">✋</span>
+        <span>MiddleClick</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="https://github.com/lillodipiazza/middleclick" target="_blank">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="container">
+      <div class="badge">v1.0 — now available</div>
+      <h1>
+        <span class="line1">Middle click.</span>
+        <span class="line2">Three fingers.</span>
+      </h1>
+      <p class="tagline">
+        A tiny macOS menu bar app that turns a 3-finger trackpad tap into a middle click — open links in new tabs, close tabs, and more.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/lillodipiazza/middleclick/releases/latest/download/MiddleClick.dmg">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Download DMG
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/lillodipiazza/middleclick" target="_blank">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <div class="hero-meta">
+        <span>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 4v3l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Free & open source
+        </span>
+        <span>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2" width="11" height="9" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M4 6h5M4 8.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          MIT License
+        </span>
+        <span>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5C4 1.5 2 3.5 2 6s2 4.5 4.5 4.5S11 8.5 11 6 9 1.5 6.5 1.5z" stroke="currentColor" stroke-width="1.2"/><path d="M2 6h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M6.5 1.5C5.5 3 5 4.5 5 6s.5 3 1.5 4.5M6.5 1.5C7.5 3 8 4.5 8 6s-.5 3-1.5 4.5" stroke="currentColor" stroke-width="1.2"/></svg>
+          macOS 12+
+        </span>
+      </div>
+
+      <!-- demo card -->
+      <div class="demo-card">
+        <div style="display:flex;align-items:center;gap:28px;">
+          <div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;text-align:center;">3-finger tap</div>
+            <div class="fingers-demo">
+              <div class="finger"></div>
+              <div class="finger"></div>
+              <div class="finger"></div>
+            </div>
+          </div>
+          <div class="arrow-demo">→</div>
+          <div style="text-align:center;">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;">middle click</div>
+            <div class="click-demo">🖱️</div>
+          </div>
+          <div class="arrow-demo">→</div>
+          <div style="text-align:center;">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;">new tab</div>
+            <div style="font-size:28px;">🗂️</div>
+          </div>
+        </div>
+        <p class="demo-label">Tap the trackpad simultaneously with 3 fingers to open links in a new tab</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="container">
+      <p class="section-label reveal">Features</p>
+      <h2 class="reveal">Everything you need,<br>nothing you don't.</h2>
+      <p class="section-sub reveal">Lightweight by design. Runs silently in the background with zero configuration required.</p>
+      <div class="features-grid">
+        <div class="feature-card reveal">
+          <div class="feature-icon">✋</div>
+          <h3>3-Finger Tap</h3>
+          <p>Touch the trackpad with 3 fingers simultaneously — the middle click fires the instant you lift them. No button to press, no Force Touch required.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="3" width="16" height="10" rx="2" stroke="#7c6dfa" stroke-width="1.5"/><path d="M6 17h8M10 13v4" stroke="#7c6dfa" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <h3>Menu Bar App</h3>
+          <p>Lives quietly in the menu bar. No Dock icon, no windows. Enable or disable with a single click from the status item.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="#7c6dfa" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="10" r="4" stroke="#7c6dfa" stroke-width="1.5"/></svg>
+          </div>
+          <h3>Launch at Login</h3>
+          <p>Toggle "Launch at Login" from the menu. Once set, MiddleClick is always ready after every restart — without thinking about it.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="feature-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#7c6dfa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3>macOS 26 Ready</h3>
+          <p>Works on macOS 12 through macOS 26 (Tahoe). Handles the changed <code style="font-family:var(--mono);font-size:12px;color:var(--accent2)">MTTouch</code> struct layout that breaks other implementations.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how-it-works" style="background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+    <div class="container">
+      <p class="section-label reveal">Internals</p>
+      <h2 class="reveal">How it works</h2>
+      <p class="section-sub reveal">Built on Apple's private multitouch API and CoreGraphics event simulation.</p>
+      <div class="steps">
+        <div class="step reveal">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <h3>Trackpad events via MultitouchSupport</h3>
+            <p>MiddleClick registers a callback with Apple's private <code style="font-family:var(--mono);font-size:13px;color:var(--accent2)">MultitouchSupport.framework</code> to receive raw per-finger touch data from the trackpad at every frame.</p>
+          </div>
+        </div>
+        <div class="step reveal">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <h3>Gesture detection</h3>
+            <p>When exactly 3 fingers touch the surface and then all lift simultaneously, the gesture is confirmed. 4+ fingers are ignored to avoid conflicts with system gestures.</p>
+            <span class="code-pill">numTouches == 3 → active</span>
+          </div>
+        </div>
+        <div class="step reveal">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <h3>Middle click simulation</h3>
+            <p>A pair of <code style="font-family:var(--mono);font-size:13px;color:var(--accent2)">CGEvent</code> mouse events (<code style="font-family:var(--mono);font-size:13px;color:var(--accent2)">otherMouseDown</code> + <code style="font-family:var(--mono);font-size:13px;color:var(--accent2)">otherMouseUp</code>) is posted at the current cursor position via <code style="font-family:var(--mono);font-size:13px;color:var(--accent2)">CGEventPost(.cghidEventTap)</code>.</p>
+          </div>
+        </div>
+        <div class="step reveal">
+          <div class="step-num">04</div>
+          <div class="step-content">
+            <h3>Accessibility permission</h3>
+            <p>Posting <code style="font-family:var(--mono);font-size:13px;color:var(--accent2)">CGEvent</code> globally requires the Accessibility permission. MiddleClick requests it once at first launch and polls until granted.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REQUIREMENTS -->
+  <section id="requirements">
+    <div class="container">
+      <p class="section-label reveal">Requirements</p>
+      <h2 class="reveal">Compatibility</h2>
+      <p class="section-sub reveal">MiddleClick is lightweight and has minimal dependencies.</p>
+      <div class="req-grid">
+        <div class="req-item reveal">
+          <div class="req-dot"></div>
+          <div><strong>macOS 12+</strong><span>Monterey, Ventura, Sonoma, Sequoia, Tahoe</span></div>
+        </div>
+        <div class="req-item reveal">
+          <div class="req-dot"></div>
+          <div><strong>Apple Silicon or Intel</strong><span>Universal binary</span></div>
+        </div>
+        <div class="req-item reveal">
+          <div class="req-dot"></div>
+          <div><strong>Built-in Trackpad</strong><span>Magic Trackpad also supported</span></div>
+        </div>
+        <div class="req-item reveal">
+          <div class="req-dot" style="background:var(--accent2)"></div>
+          <div><strong>Accessibility permission</strong><span>Required for CGEvent posting</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="container">
+    <div class="cta-banner reveal">
+      <h2>Ready to middle-click?</h2>
+      <p>Download the DMG, drag to Applications, grant Accessibility — done.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <a class="btn btn-primary" href="https://github.com/lillodipiazza/middleclick/releases/latest/download/MiddleClick.dmg">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Download free
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/lillodipiazza/middleclick" target="_blank">View source ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="inner">
+      <div class="footer-brand">
+        <span>✋</span>
+        <span>MiddleClick</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/lillodipiazza/middleclick" target="_blank">GitHub</a>
+        <a href="https://github.com/lillodipiazza/middleclick/releases" target="_blank">Releases</a>
+        <a href="https://github.com/lillodipiazza/middleclick/blob/main/LICENSE" target="_blank">MIT License</a>
+      </div>
+      <p class="footer-copy">© 2026 lillo</p>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll reveal
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((e, i) => {
+        if (e.isIntersecting) {
+          e.target.style.transitionDelay = (i * 0.07) + 's';
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Feature card mouse glow
+    document.querySelectorAll('.feature-card').forEach(card => {
+      card.addEventListener('mousemove', e => {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+        card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+      });
+    });
+  </script>
+</body>
+</html>
